@@ -68,7 +68,7 @@ try {
 finally {
     Write-Host "[4/4] Stripping token from .git/config ..."
     git remote set-url origin $bareUrl 2>$null
-    # 某些受限环境里 git 会留下 config.lock 让 set-url 失败，清掉后再试一次
+    # Restricted environments may leave a stale config.lock, which makes set-url fail: clear and retry.
     if (Test-Path '.git/config.lock') {
         Remove-Item '.git/config.lock' -Force -ErrorAction SilentlyContinue
         if (Test-Path '.git/config.lock') {

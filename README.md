@@ -7,7 +7,7 @@
 ## 安装（从零开始三步）
 
 ```bat
-git clone <本仓库地址> bili-dl
+git clone https://github.com/rickyid666/bili-dl.git
 cd bili-dl
 python tools/get_ffmpeg.py      :: 下载 ffmpeg 到 tools/（仓库里不含这个 100MB 的二进制）
 ```

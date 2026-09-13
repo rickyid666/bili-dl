@@ -1,0 +1,30 @@
+# ===== 凭据：绝对不要提交 =====
+config.json
+cookies.txt
+*.cookie
+*.cookies
+
+# ===== 下载产物 =====
+downloads/
+*.mp4
+*.m4s
+*.flv
+*.blv
+
+# ===== ffmpeg 二进制不入库（用 tools/get_ffmpeg.py 自动下载）=====
+tools/ffmpeg.exe
+tools/ffmpeg
+ffmpeg.zip
+ffmpeg-*/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ===== 临时文件 / 日志 =====
+*.log
+*.part
+*.ffmpeg.log
+.tmp/

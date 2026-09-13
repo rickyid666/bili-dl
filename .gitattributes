@@ -1,0 +1,16 @@
+# 关键：.bat 必须保持原样（GBK 编码 + CRLF 行尾），绝不能让 git 转换换行。
+# 用 LF 行尾的 bat 在 cmd 里解析 if(...)/goto 会出错，这是本项目踩过的坑。
+*.bat -text
+*.cmd -text
+
+# 其余文本文件统一 LF
+*.py        text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+.gitignore  text eol=lf
+LICENSE     text eol=lf
+
+# 二进制
+*.exe   binary
+*.zip   binary
+*.mp4   binary

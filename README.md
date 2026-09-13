@@ -33,7 +33,12 @@ python tools/get_ffmpeg.py      :: 下载 ffmpeg 到 tools/（仓库里不含这
 python bili_dl.py BV1jw8w6yESY                    :: 默认最高清晰度
 python bili_dl.py https://www.bilibili.com/video/BV1jw8w6yESY/ -q 1080 -p all
 python bili_dl.py BV1jw8w6yESY BV1vyNmzxErv       :: 一次多个
-python bili_dl.py BV1jw8w6yESY --cookie "SESSDATA=xxx; bili_jct=yyy"
+
+:: 要 1080P 就得带上 cookie —— 用下面任一种，都不会让 cookie 出现在命令行里
+set BILI_COOKIE=SESSDATA=xxx; bili_jct=yyy
+python bili_dl.py BV1jw8w6yESY -q 1080
+
+python bili_dl.py BV1jw8w6yESY -q 1080 --cookie-file cookies.txt
 ```
 
 常用参数：
@@ -43,8 +48,8 @@ python bili_dl.py BV1jw8w6yESY --cookie "SESSDATA=xxx; bili_jct=yyy"
 | `-q, --quality` | `best` / `8k` / `4k` / `1080p60` / `1080` / `720p60` / `720` / `480` / `360` |
 | `-p, --parts` | `1`（默认）/ `1,3` / `all` |
 | `-o, --outdir` | 输出目录，默认 `downloads/` |
-| `--cookie` | 登录 cookie，也可用环境变量 `BILI_COOKIE` |
-| `--cookie-file` | 从文本文件读 cookie |
+| `BILI_COOKIE` 环境变量 / `--cookie-file` | **推荐**：cookie 走环境变量或文本文件，不会出现在进程命令行里 |
+| `--cookie` | ⚠️ 直接写在命令行 —— 本机其他进程（`tasklist /v`、任务管理器「命令行」列）和 shell 历史都能看到，非必要别用 |
 | `--threads` | 分片线程数，默认 8 |
 | `--ffmpeg` | 手动指定 ffmpeg.exe |
 | `--keep-temp` | 保留下载的 `.m4s` 临时流 |
@@ -70,7 +75,21 @@ B站把清晰度锁在**登录态**上：
 1. 浏览器打开并登录 bilibili.com
 2. 按 `F12` → 切到 `Console`（控制台）
 3. 输入 `document.cookie` 回车
-4. 复制整串（含 `SESSDATA=...; bili_jct=...` 等），粘到网页界面的「登录 cookie」框里（会自动记住），或命令行 `--cookie "..."`
+4. 复制整串（含 `SESSDATA=...; bili_jct=...` 等）
+
+**怎么把它交给程序（按安全性排序）：**
+
+| 方式 | 怎么用 | 说明 |
+|---|---|---|
+| 网页界面 | 粘进「登录 cookie」框 | 存在本机 `config.json`，最省事 |
+| 环境变量 | `set BILI_COOKIE=SESSDATA=...` 后直接跑 | **推荐**：只活在当前窗口，不进命令行 |
+| 文件 | 存成 `cookies.txt`，加 `--cookie-file cookies.txt` | **推荐**：`cookies.txt` 已被 .gitignore 挡住 |
+| 命令行参数 | `--cookie "SESSDATA=..."` | ⚠️ **不推荐**，原因见下 |
+
+> ⚠️ **为什么不建议 `--cookie` 直接写在命令行**：Windows 上任何本地进程都能从 `tasklist /v`、
+> 任务管理器「命令行」列或 WMI 读到你的完整命令行；PowerShell / CMD 的历史记录也会再留一份。
+> 共用电脑、录屏、远程协助、CI 日志里，这等于把登录态摊在桌面上。
+> **优先用环境变量或 `--cookie-file`。**
 
 > cookie 只存在本机 `config.json`，不会外发。想清空直接删掉该文件即可。
 

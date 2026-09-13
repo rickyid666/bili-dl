@@ -424,15 +424,18 @@ def _cli(argv: list[str]) -> int:
     ap.add_argument('-q', '--quality', default='best',
                     help='清晰度：best/8k/4k/1080p60/1080/720p60/720/480/360（默认 best）')
     ap.add_argument('-p', '--parts', default='1', help='分P：1 / 1,3 / all（默认 1）')
-    ap.add_argument('--cookie', default=os.environ.get('BILI_COOKIE', ''),
-                    help='登录 cookie（不传则最高 480P）；也可用环境变量 BILI_COOKIE')
-    ap.add_argument('--cookie-file', default='', help='从文件读取 cookie（一行字符串）')
+    ap.add_argument('--cookie-file', default='',
+                    help='从文本文件读取 cookie（一行字符串）。推荐：不会出现在进程命令行里')
+    ap.add_argument('--cookie', default='',
+                    help='登录 cookie。注意：直接写在命令行会被本机其他进程'
+                         '（tasklist / 任务管理器）和 shell 历史看到，'
+                         '建议改用环境变量 BILI_COOKIE 或 --cookie-file')
     ap.add_argument('--ffmpeg', default='', help='指定 ffmpeg.exe 路径')
     ap.add_argument('--threads', type=int, default=8, help='分片线程数（默认 8）')
     ap.add_argument('--keep-temp', action='store_true', help='保留下载的临时流文件')
     args = ap.parse_args(argv)
 
-    cookie = args.cookie
+    cookie = args.cookie or os.environ.get('BILI_COOKIE', '').strip()
     if not cookie and args.cookie_file and os.path.isfile(args.cookie_file):
         cookie = open(args.cookie_file, encoding='utf-8').read().strip()
 

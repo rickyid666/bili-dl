@@ -203,22 +203,33 @@ def _probe_size(url: str, headers: dict) -> tuple[int, bool]:
 def _fetch(url: str, headers: dict, path: str, start: int | None = None,
            end: int | None = None, counter: list | None = None,
            lock: threading.Lock | None = None, retries: int = 4) -> None:
-    h = dict(headers)
-    if start is not None:
-        h['Range'] = f'bytes={start}-{end}'
+    """下载一段到 path。中途断线时按已写入字节续传（服务器支持 Range 才成立）。"""
     last = None
     for attempt in range(retries):
+        # 第一次一律从头写（顺便覆盖上次运行残留的分片），只有重试才续传
+        got = os.path.getsize(path) if (attempt > 0 and os.path.exists(path)) else 0
+        h = dict(headers)
+        if start is not None or got > 0:
+            h['Range'] = f'bytes={(start or 0) + got}-' + ('' if end is None else str(end))
+        mode = 'ab' if got > 0 else 'wb'
         try:
             req = urllib.request.Request(url, headers=h)
-            with urllib.request.urlopen(req, timeout=90) as r, open(path, 'wb') as f:
-                while True:
-                    chunk = r.read(CHUNK)
-                    if not chunk:
-                        break
-                    f.write(chunk)
+            with urllib.request.urlopen(req, timeout=90) as r:
+                if got > 0 and r.status != 206:
+                    # 服务器无视了 Range，续传不成立，退回重下
                     if counter is not None and lock is not None:
                         with lock:
-                            counter[0] += len(chunk)
+                            counter[0] -= got
+                    got, mode = 0, 'wb'
+                with open(path, mode) as f:
+                    while True:
+                        chunk = r.read(CHUNK)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        if counter is not None and lock is not None:
+                            with lock:
+                                counter[0] += len(chunk)
             return
         except Exception as e:  # noqa: BLE001
             last = e
@@ -247,7 +258,6 @@ def download_stream(urls: list[str], dest: str, referer: str, cookie: str | None
                 stop = threading.Event()
 
                 def reporter():
-                    base = counter[0]
                     while not stop.wait(0.4):
                         if progress:
                             progress(label, counter[0], size)

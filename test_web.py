@@ -1,3 +1,8 @@
+"""Web UI 端到端冒烟测试：会真的向本地服务提交一个下载任务。
+
+注意：依赖外网 + 目标视频仍然存在（默认 BV1jw8w6yESY），
+所以只适合手动跑，别接进任何自动化流程。
+"""
 import json
 import sys
 import time

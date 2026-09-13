@@ -27,6 +27,17 @@ os.makedirs(OUTDIR, exist_ok=True)
 
 TASKS: dict = {}
 LOCK = threading.Lock()
+TASK_TTL = 3600          # 已完成/失败的任务在内存里保留 1 小时
+
+
+def _gc_tasks() -> None:
+    """清掉过期任务，免得 TASKS 跑久了只增不减。"""
+    now = time.time()
+    with LOCK:
+        for k in [k for k, v in TASKS.items()
+                  if v.get('status') in ('done', 'error')
+                  and now - v.get('finished_at', now) > TASK_TTL]:
+            TASKS.pop(k, None)
 
 
 def load_config() -> dict:
@@ -76,11 +87,11 @@ def run_task(tid: str, url: str, quality: str, parts: str, cookie: str) -> None:
         with LOCK:
             t = TASKS[tid]
             t.update(status='done', title=res['title'], owner=res.get('owner', ''),
-                     files=files, percent=100, stage='完成')
+                     files=files, percent=100, stage='完成', finished_at=time.time())
     except BaseException as e:  # noqa: BLE001
         with LOCK:
             TASKS[tid].update(status='error', error=f'{type(e).__name__}: {e}',
-                              stage='失败')
+                              stage='失败', finished_at=time.time())
 
 
 PAGE = r'''<!doctype html>
@@ -209,6 +220,13 @@ $('open').onclick=()=>fetch('/api/open',{method:'POST'});
 '''
 
 
+class BiliServer(ThreadingHTTPServer):
+    daemon_threads = True
+    # Windows 上 SO_REUSEADDR 语义宽松：两个进程能同时绑同一端口、请求被随机抢走，
+    # 表现为「明明关了窗口却还在跑」。关掉它，重复启动才会如实报「端口被占用」。
+    allow_reuse_address = os.name != 'nt'
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = 'bili_dl'
 
@@ -242,7 +260,27 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _same_origin(self) -> bool:
+        """挡住跨站请求。
+
+        浏览器对跨站 POST 一定会带 Origin；而 text/plain 这类「简单请求」又不触发
+        preflight，所以不能指望 CORS——必须在服务端自己校验，否则任意网页都能
+        用 fetch 悄悄往这里塞下载任务。
+        """
+        origin = self.headers.get('Origin')
+        if not origin:
+            return True                       # 本机脚本 / curl 之类本来就不带 Origin
+        return origin in (f'http://127.0.0.1:{PORT}', f'http://localhost:{PORT}',
+                          f'http://[::1]:{PORT}')
+
     def do_POST(self):  # noqa: N802
+        if not self._same_origin():
+            return self._json({'error': 'forbidden: cross-origin request'}, 403)
+        ctype = (self.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+        if ctype and ctype != 'application/json':
+            # 只收 JSON：跨站的简单请求只能发 text/plain / form-data，
+            # 想发 application/json 就绕不过 preflight，而这里不响应 OPTIONS。
+            return self._json({'error': f'unsupported content-type: {ctype}'}, 415)
         length = int(self.headers.get('Content-Length') or 0)
         raw = self.rfile.read(length) if length else b'{}'
         if self.path.startswith('/api/open'):
@@ -262,10 +300,12 @@ class Handler(BaseHTTPRequestHandler):
             cfg = {'cookie': req.get('cookie', ''), 'quality': req.get('quality', 'best'),
                    'parts': req.get('parts', '1')}
             save_config(cfg)
+            _gc_tasks()
             tid = uuid.uuid4().hex[:12]
             with LOCK:
                 TASKS[tid] = {'id': tid, 'status': 'queued', 'stage': '排队中',
-                              'done': 0, 'total': 0, 'percent': 0, 'files': []}
+                              'done': 0, 'total': 0, 'percent': 0, 'files': [],
+                              'created_at': time.time()}
             threading.Thread(target=run_task, args=(
                 tid, url, cfg['quality'], cfg['parts'], cfg['cookie']), daemon=True).start()
             return self._json({'id': tid})
@@ -289,7 +329,7 @@ def main() -> None:
     except Exception:  # noqa: BLE001
         pass
     try:
-        srv = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
+        srv = BiliServer(('127.0.0.1', PORT), Handler)
     except OSError as e:
         print(f'[错误] 端口 {PORT} 起不来：{e}')
         print(f'        可能是端口被占用。换一个端口再试，例如：')
